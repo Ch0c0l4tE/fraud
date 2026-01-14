@@ -4,4 +4,7 @@ export type {
   Signal,
   SignalType,
   Session,
+  KeystrokeEvent,
+  DigraphTiming,
+  TypingStatistics,
 } from './fraud-tracker';
