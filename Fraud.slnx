@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Fraud.Engine.ML/Fraud.Engine.ML.csproj" />
+    <Project Path="src/Fraud.Engine.Rules/Fraud.Engine.Rules.csproj" />
+    <Project Path="src/Fraud.Engine/Fraud.Engine.csproj" />
+    <Project Path="src/Fraud.Ingestion.Api/Fraud.Ingestion.Api.csproj" />
+    <Project Path="src/Fraud.Sdk.Contracts/Fraud.Sdk.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Fraud.Engine.Tests/Fraud.Engine.Tests.csproj" />
+    <Project Path="tests/Fraud.Ingestion.Api.Tests/Fraud.Ingestion.Api.Tests.csproj" />
+    <Project Path="tests/Fraud.Integration.Tests/Fraud.Integration.Tests.csproj" />
+  </Folder>
+</Solution>
