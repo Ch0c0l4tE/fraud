@@ -263,6 +263,7 @@ CONSTRAINTS:
 - Validate signal schema with FluentValidation
 - Rate limit: 100 requests/session/minute
 - Return 202 Accepted for valid signals
+- Use stander software design patterns 
 
 OUTPUT: Controller/endpoint code with validation.
 ```
