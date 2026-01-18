@@ -5,9 +5,11 @@ namespace Fraud.Sdk.Contracts;
 /// </summary>
 public enum SignalType
 {
+    // Browser/Web signals
     MouseMove,
     MouseClick,
     Keystroke,
+    KeystrokeDynamics,
     Scroll,
     Touch,
     Visibility,
@@ -15,11 +17,18 @@ public enum SignalType
     Paste,
     Device,
     Performance,
+    Fingerprint,
+    FormInteraction,
+    
+    // Mobile signals
     Accelerometer,
     Gyroscope,
     AppLifecycle,
     JailbreakDetection,
-    RootDetection
+    RootDetection,
+    
+    // Unknown/custom
+    Unknown
 }
 
 /// <summary>

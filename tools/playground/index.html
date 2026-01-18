@@ -529,19 +529,28 @@
     }
 
     // Button handlers
-    initBtn.addEventListener('click', () => {
-      tracker.init({
-        endpoint: 'http://localhost:4000',
-        clientId: 'playground-user',
-        batchSize: 50,
-        flushInterval: 500,
-        debug: true,
-        // SDK callbacks
-        onSignal: handleSignal,
-        onFlush: handleFlush,
-        onTypingStats: handleTypingStats,
-        onSessionStart: handleSessionStart,
-      });
+    initBtn.addEventListener('click', async () => {
+      initBtn.disabled = true;
+      statusText.textContent = 'Connecting...';
+      
+      try {
+        await tracker.init({
+          endpoint: 'http://localhost:4000',
+          clientId: 'playground-user',
+          batchSize: 50,
+          flushInterval: 500,
+          debug: true,
+          // SDK callbacks
+          onSignal: handleSignal,
+          onFlush: handleFlush,
+          onTypingStats: handleTypingStats,
+          onSessionStart: handleSessionStart,
+        });
+      } catch (err) {
+        log(`Failed to initialize: ${err}`, 'system');
+        initBtn.disabled = false;
+        statusText.textContent = 'Connection failed';
+      }
     });
 
     completeBtn.addEventListener('click', async () => {
@@ -580,6 +589,7 @@
 
     log('Playground ready. Click "Initialize Tracker" to start.', 'system');
     log('Using actual SDK from @fraud/browser-sdk package', 'system');
+    log('Connected to real .NET Ingestion API at http://localhost:4000', 'system');
   </script>
 </body>
 </html>
