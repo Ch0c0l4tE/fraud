@@ -278,6 +278,117 @@
       color: var(--success);
       font-size: 1rem;
     }
+
+    /* Fraud Analysis Panel Styles */
+    .analysis-panel {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: var(--bg);
+      border-radius: 8px;
+    }
+
+    .analysis-verdict {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .verdict-badge {
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 1rem;
+      text-transform: uppercase;
+    }
+
+    .verdict-allow {
+      background: rgba(34, 197, 94, 0.2);
+      color: var(--success);
+    }
+
+    .verdict-review {
+      background: rgba(234, 179, 8, 0.2);
+      color: var(--warning);
+    }
+
+    .verdict-block {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--danger);
+    }
+
+    .confidence-score {
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .risk-factors {
+      margin-top: 1rem;
+    }
+
+    .risk-factor {
+      padding: 0.75rem;
+      background: var(--surface);
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+      border-left: 3px solid var(--warning);
+    }
+
+    .risk-factor.high {
+      border-left-color: var(--danger);
+    }
+
+    .risk-factor-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.25rem;
+    }
+
+    .risk-factor-name {
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+
+    .risk-factor-score {
+      font-size: 0.75rem;
+      padding: 0.25rem 0.5rem;
+      background: var(--bg);
+      border-radius: 4px;
+    }
+
+    .risk-factor-desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .analysis-waiting {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-muted);
+    }
+
+    .analysis-polling {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+    }
+
+    .spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--surface-light);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -365,6 +476,17 @@
         <h2>Signal Log</h2>
         <div class="log" id="log"></div>
       </div>
+
+      <!-- Fraud Analysis -->
+      <div class="card">
+        <h2>Fraud Analysis</h2>
+        <div id="analysisContent">
+          <div class="analysis-waiting">
+            <p>Initialize tracker to start monitoring</p>
+            <p style="font-size: 0.75rem; margin-top: 0.5rem;">Analysis updates every 3 seconds after session starts</p>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -382,6 +504,8 @@
     let totalSignals = 0;
     let flushCount = 0;
     let durationInterval = null;
+    let analysisInterval = null;
+    let currentSessionId = null;
 
     // DOM elements
     const statusDot = document.getElementById('statusDot');
@@ -395,6 +519,7 @@
     const flushCountEl = document.getElementById('flushCount');
     const durationEl = document.getElementById('duration');
     const signalCountsEl = document.getElementById('signalCounts');
+    const analysisContent = document.getElementById('analysisContent');
     
     // Typing stats
     const avgDwellEl = document.getElementById('avgDwell');
@@ -479,6 +604,111 @@
       }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Fraud Analysis Functions
+    // ─────────────────────────────────────────────────────────────
+
+    async function fetchAnalysis() {
+      if (!currentSessionId) return;
+
+      try {
+        const response = await fetch(`http://localhost:4000/api/v1/sessions/${currentSessionId}/analysis`);
+        if (!response.ok) {
+          renderAnalysisWaiting('Waiting for analysis data...');
+          return;
+        }
+
+        const data = await response.json();
+        if (data.success && data.data) {
+          renderAnalysis(data.data);
+        }
+      } catch (err) {
+        renderAnalysisWaiting('Unable to fetch analysis');
+      }
+    }
+
+    function renderAnalysisWaiting(message) {
+      analysisContent.innerHTML = `
+        <div class="analysis-waiting">
+          <p>${message}</p>
+          <div class="analysis-polling">
+            <div class="spinner"></div>
+            <span>Polling every 3 seconds...</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAnalysis(analysis) {
+      const verdictLabels = ['ALLOW', 'REVIEW', 'BLOCK'];
+      const verdictClasses = ['verdict-allow', 'verdict-review', 'verdict-block'];
+      const verdict = analysis.verdict || 0;
+      const score = (analysis.confidenceScore * 100).toFixed(1);
+
+      let html = `
+        <div class="analysis-panel">
+          <div class="analysis-verdict">
+            <span class="verdict-badge ${verdictClasses[verdict]}">${verdictLabels[verdict]}</span>
+            <span class="confidence-score">${score}%</span>
+            <span style="color: var(--text-muted); font-size: 0.75rem;">confidence</span>
+          </div>
+      `;
+
+      if (analysis.riskFactors && analysis.riskFactors.length > 0) {
+        html += '<div class="risk-factors">';
+        html += '<div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">Risk Factors Detected:</div>';
+        
+        for (const factor of analysis.riskFactors) {
+          const isHigh = factor.score >= 0.7;
+          const scorePercent = (factor.score * 100).toFixed(0);
+          html += `
+            <div class="risk-factor ${isHigh ? 'high' : ''}">
+              <div class="risk-factor-header">
+                <span class="risk-factor-name">${formatRuleName(factor.name)}</span>
+                <span class="risk-factor-score">${scorePercent}% (weight: ${factor.weight})</span>
+              </div>
+              <div class="risk-factor-desc">${factor.description}</div>
+            </div>
+          `;
+        }
+        html += '</div>';
+      } else {
+        html += '<div style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.5rem;">No risk factors detected</div>';
+      }
+
+      html += `
+          <div class="analysis-polling">
+            <div class="spinner"></div>
+            <span>Auto-refreshing every 3 seconds</span>
+          </div>
+        </div>
+      `;
+
+      analysisContent.innerHTML = html;
+    }
+
+    function formatRuleName(name) {
+      return name
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function startAnalysisPolling() {
+      renderAnalysisWaiting('Waiting for first flush...');
+      // Start polling after 2 seconds to give time for first signals
+      setTimeout(() => {
+        fetchAnalysis();
+        analysisInterval = setInterval(fetchAnalysis, 3000);
+      }, 2000);
+    }
+
+    function stopAnalysisPolling() {
+      if (analysisInterval) {
+        clearInterval(analysisInterval);
+        analysisInterval = null;
+      }
+    }
+
     // Signal callback handler
     function handleSignal(signal) {
       totalSignals++;
@@ -516,6 +746,7 @@
 
     // Session start callback handler
     function handleSessionStart(session) {
+      currentSessionId = session.id;
       sessionIdInput.value = session.id;
       statusDot.classList.add('active');
       statusText.textContent = 'Tracking active';
@@ -524,6 +755,9 @@
       
       startTime = Date.now();
       durationInterval = setInterval(updateDuration, 1000);
+      
+      // Start fraud analysis polling
+      startAnalysisPolling();
       
       log(`Session started: ${session.id}`, 'system');
     }
@@ -563,6 +797,16 @@
       completeBtn.disabled = true;
       
       clearInterval(durationInterval);
+      stopAnalysisPolling();
+      
+      // Fetch final analysis
+      await fetchAnalysis();
+      
+      // Update the analysis panel to show it's final
+      const pollingDiv = analysisContent.querySelector('.analysis-polling');
+      if (pollingDiv) {
+        pollingDiv.innerHTML = '<span style="color: var(--success);">✓ Final analysis</span>';
+      }
       
       log('Session completed', 'system');
       
@@ -571,6 +815,7 @@
       flushCount = 0;
       signalCounts = {};
       mouseTrail = [];
+      currentSessionId = null;
       signalCountEl.textContent = '0';
       flushCountEl.textContent = '0';
       durationEl.textContent = '0s';
