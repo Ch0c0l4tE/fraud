@@ -1,0 +1,16 @@
+{
+  "name": "fraud-playground",
+  "version": "0.1.0",
+  "description": "Test playground for fraud detection SDK",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run api\" \"npm run serve\"",
+    "serve": "npx serve -p 3000",
+    "api": "node mock-server.js",
+    "build:sdk": "cd ../../src/sdks/browser && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "serve": "^14.2.1"
+  }
+}

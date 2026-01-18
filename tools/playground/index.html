@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fraud Tracker SDK Playground</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface-light: #334155;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --success: #22c55e;
+      --warning: #eab308;
+      --danger: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--surface-light);
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.875rem;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--danger);
+    }
+
+    .status-dot.active {
+      background: var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .controls {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      filter: brightness(1.1);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    button.secondary {
+      background: var(--surface-light);
+    }
+
+    button.danger {
+      background: var(--danger);
+    }
+
+    .test-area {
+      margin-top: 1rem;
+    }
+
+    .test-area label {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .test-area input,
+    .test-area textarea {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid var(--surface-light);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .test-area textarea {
+      height: 100px;
+      resize: vertical;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 0.875rem;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+
+    .stat {
+      text-align: center;
+      padding: 1rem;
+      background: var(--bg);
+      border-radius: 8px;
+    }
+
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    .log {
+      height: 300px;
+      overflow-y: auto;
+      background: var(--bg);
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 0.75rem;
+      line-height: 1.6;
+    }
+
+    .log-entry {
+      margin-bottom: 0.25rem;
+    }
+
+    .log-entry.mouse { color: #a78bfa; }
+    .log-entry.keystroke { color: #34d399; }
+    .log-entry.keystroke_dynamics { color: #22c55e; }
+    .log-entry.scroll { color: #fbbf24; }
+    .log-entry.touch { color: #f472b6; }
+    .log-entry.visibility { color: #60a5fa; }
+    .log-entry.focus { color: #818cf8; }
+    .log-entry.paste { color: #fb923c; }
+    .log-entry.device { color: #2dd4bf; }
+    .log-entry.performance { color: #c084fc; }
+    .log-entry.system { color: var(--text-muted); font-style: italic; }
+
+    .signal-counts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .signal-badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+
+    .mouse_move { background: rgba(167, 139, 250, 0.2); color: #a78bfa; }
+    .mouse_click { background: rgba(167, 139, 250, 0.3); color: #c4b5fd; }
+    .keystroke { background: rgba(52, 211, 153, 0.2); color: #34d399; }
+    .keystroke_dynamics { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .scroll { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+    .touch { background: rgba(244, 114, 182, 0.2); color: #f472b6; }
+    .visibility { background: rgba(96, 165, 250, 0.2); color: #60a5fa; }
+    .focus { background: rgba(129, 140, 248, 0.2); color: #818cf8; }
+    .paste { background: rgba(251, 146, 60, 0.2); color: #fb923c; }
+    .device { background: rgba(45, 212, 191, 0.2); color: #2dd4bf; }
+    .performance { background: rgba(192, 132, 252, 0.2); color: #c084fc; }
+
+    .canvas-area {
+      width: 100%;
+      height: 200px;
+      background: var(--bg);
+      border-radius: 8px;
+      margin-top: 1rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #mouseCanvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    .typing-stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .typing-stat {
+      padding: 0.75rem;
+      background: var(--bg);
+      border-radius: 6px;
+      font-size: 0.75rem;
+    }
+
+    .typing-stat-label {
+      color: var(--text-muted);
+    }
+
+    .typing-stat-value {
+      font-weight: 600;
+      color: var(--success);
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔍 Fraud Tracker SDK Playground</h1>
+      <div class="status">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">Not initialized</span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- Controls -->
+      <div class="card">
+        <h2>Controls</h2>
+        <div class="controls">
+          <button id="initBtn">Initialize Tracker</button>
+          <button id="completeBtn" class="secondary" disabled>Complete Session</button>
+          <button id="clearBtn" class="danger">Clear Log</button>
+        </div>
+        
+        <div class="test-area">
+          <label>Session ID</label>
+          <input type="text" id="sessionId" readonly placeholder="Initialize to get session ID">
+          
+          <label>Test Input (type here to capture keystroke dynamics)</label>
+          <textarea id="testInput" placeholder="Start typing to capture keystroke dynamics..."></textarea>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="card">
+        <h2>Session Stats</h2>
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-value" id="signalCount">0</div>
+            <div class="stat-label">Signals</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value" id="flushCount">0</div>
+            <div class="stat-label">Flushes</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value" id="duration">0s</div>
+            <div class="stat-label">Duration</div>
+          </div>
+        </div>
+        
+        <div class="signal-counts" id="signalCounts"></div>
+
+        <div class="typing-stats" id="typingStats">
+          <div class="typing-stat">
+            <div class="typing-stat-label">Avg Dwell</div>
+            <div class="typing-stat-value" id="avgDwell">-</div>
+          </div>
+          <div class="typing-stat">
+            <div class="typing-stat-label">Avg Flight</div>
+            <div class="typing-stat-value" id="avgFlight">-</div>
+          </div>
+          <div class="typing-stat">
+            <div class="typing-stat-label">Est. WPM</div>
+            <div class="typing-stat-value" id="estWpm">-</div>
+          </div>
+          <div class="typing-stat">
+            <div class="typing-stat-label">Error Rate</div>
+            <div class="typing-stat-value" id="errorRate">-</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mouse Visualization -->
+      <div class="card">
+        <h2>Mouse Tracking</h2>
+        <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+          Move your mouse in this area to see tracking visualization
+        </p>
+        <div class="canvas-area">
+          <canvas id="mouseCanvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Signal Log -->
+      <div class="card">
+        <h2>Signal Log</h2>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Include the SDK (will be built from TypeScript) -->
+  <script type="module">
+    // Since we're in dev mode, we'll create a minimal inline version
+    // In production, you'd include the built fraud-tracker.js
+    
+    // ─────────────────────────────────────────────────────────────
+    // Inline SDK for playground (mirrors fraud-tracker.ts)
+    // ─────────────────────────────────────────────────────────────
+    
+    class SignalBuffer {
+      constructor(maxSize = 50) {
+        this.signals = [];
+        this.maxSize = maxSize;
+      }
+      
+      push(signal) {
+        this.signals.push(signal);
+        return this.signals.length >= this.maxSize;
+      }
+      
+      flush() {
+        const batch = [...this.signals];
+        this.signals = [];
+        return batch;
+      }
+      
+      get length() {
+        return this.signals.length;
+      }
+    }
+
+    class FraudTracker {
+      constructor() {
+        this.config = { endpoint: '', clientId: '', batchSize: 50, flushInterval: 500, debug: false };
+        this.session = null;
+        this.buffer = new SignalBuffer(50);
+        this.flushTimer = null;
+        this.statsFlushTimer = null;
+        this.isInitialized = false;
+        
+        // Keystroke dynamics state
+        this.keyTimes = new Map();
+        this.lastKeyUpTime = 0;
+        this.lastKeyCode = '';
+        this.dwellTimes = [];
+        this.flightTimes = [];
+        this.digraphTimings = [];
+        this.errorKeyCount = 0;
+        this.charKeyCount = 0;
+        this.burstStartTime = 0;
+        this.burstCount = 0;
+        
+        // Mouse state
+        this.lastMousePosition = { x: 0, y: 0, time: 0 };
+        this.lastScrollTime = 0;
+        
+        // Callbacks for playground UI
+        this.onSignal = null;
+        this.onFlush = null;
+        this.onStats = null;
+      }
+
+      init(config) {
+        if (this.isInitialized) return;
+        
+        this.config = { ...this.config, ...config };
+        this.buffer = new SignalBuffer(this.config.batchSize);
+        this.session = this.createSession();
+        this.isInitialized = true;
+        
+        this.attachListeners();
+        this.startFlushTimer();
+        this.startStatsFlushTimer();
+        this.captureDeviceInfo();
+        this.capturePerformance();
+        
+        return this.session;
+      }
+
+      createSession() {
+        return {
+          id: this.generateUUID(),
+          clientId: this.config.clientId,
+          startedAt: Date.now(),
+          deviceFingerprint: this.generateFingerprint(),
+        };
+      }
+
+      generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+          const r = Math.random() * 16 | 0;
+          const v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
+      }
+
+      generateFingerprint() {
+        const components = [
+          navigator.userAgent,
+          navigator.language,
+          screen.width,
+          screen.height,
+          screen.colorDepth,
+          new Date().getTimezoneOffset(),
+        ];
+        let hash = 0;
+        const str = components.join('|');
+        for (let i = 0; i < str.length; i++) {
+          const char = str.charCodeAt(i);
+          hash = (hash << 5) - hash + char;
+          hash = hash & hash;
+        }
+        return Math.abs(hash).toString(16);
+      }
+
+      capture(type, payload) {
+        if (!this.isInitialized) return;
+        
+        const signal = { type, timestamp: Date.now(), payload };
+        const shouldFlush = this.buffer.push(signal);
+        
+        if (this.onSignal) this.onSignal(signal);
+        
+        if (shouldFlush) this.flush();
+      }
+
+      async complete() {
+        if (!this.isInitialized || !this.session) return;
+        
+        this.emitTypingStatistics();
+        this.stopFlushTimer();
+        this.stopStatsFlushTimer();
+        this.detachListeners();
+        await this.flush();
+        await this.sendComplete();
+        
+        const sessionId = this.session.id;
+        this.resetKeystrokeDynamics();
+        this.session = null;
+        this.isInitialized = false;
+        
+        return sessionId;
+      }
+
+      getSessionId() {
+        return this.session?.id ?? null;
+      }
+
+      attachListeners() {
+        document.addEventListener('mousemove', this.handleMouseMove);
+        document.addEventListener('click', this.handleClick);
+        document.addEventListener('keydown', this.handleKeyDown);
+        document.addEventListener('keyup', this.handleKeyUp);
+        document.addEventListener('scroll', this.handleScroll, { passive: true });
+        document.addEventListener('touchstart', this.handleTouch, { passive: true });
+        document.addEventListener('touchmove', this.handleTouch, { passive: true });
+        document.addEventListener('visibilitychange', this.handleVisibility);
+        window.addEventListener('focus', this.handleFocus);
+        window.addEventListener('blur', this.handleBlur);
+        document.addEventListener('paste', this.handlePaste);
+        window.addEventListener('beforeunload', this.handleUnload);
+      }
+
+      detachListeners() {
+        document.removeEventListener('mousemove', this.handleMouseMove);
+        document.removeEventListener('click', this.handleClick);
+        document.removeEventListener('keydown', this.handleKeyDown);
+        document.removeEventListener('keyup', this.handleKeyUp);
+        document.removeEventListener('scroll', this.handleScroll);
+        document.removeEventListener('touchstart', this.handleTouch);
+        document.removeEventListener('touchmove', this.handleTouch);
+        document.removeEventListener('visibilitychange', this.handleVisibility);
+        window.removeEventListener('focus', this.handleFocus);
+        window.removeEventListener('blur', this.handleBlur);
+        document.removeEventListener('paste', this.handlePaste);
+        window.removeEventListener('beforeunload', this.handleUnload);
+      }
+
+      handleMouseMove = (e) => {
+        const now = Date.now();
+        const dx = e.clientX - this.lastMousePosition.x;
+        const dy = e.clientY - this.lastMousePosition.y;
+        const dt = now - this.lastMousePosition.time || 1;
+        const velocity = Math.sqrt(dx * dx + dy * dy) / dt;
+        
+        this.capture('mouse_move', { x: e.clientX, y: e.clientY, velocity, dx, dy });
+        this.lastMousePosition = { x: e.clientX, y: e.clientY, time: now };
+      };
+
+      handleClick = (e) => {
+        this.capture('mouse_click', {
+          x: e.clientX,
+          y: e.clientY,
+          button: e.button,
+          target: e.target?.tagName,
+        });
+      };
+
+      handleKeyDown = (e) => {
+        const now = Date.now();
+        const keyId = e.code;
+        
+        if (this.keyTimes.has(keyId)) return;
+        this.keyTimes.set(keyId, now);
+        
+        // Burst detection
+        if (this.lastKeyUpTime > 0 && (now - this.lastKeyUpTime) > 2000) {
+          this.burstCount++;
+          this.burstStartTime = now;
+        } else if (this.burstStartTime === 0) {
+          this.burstStartTime = now;
+          this.burstCount = 1;
+        }
+      };
+
+      handleKeyUp = (e) => {
+        const now = Date.now();
+        const keyId = e.code;
+        const downTime = this.keyTimes.get(keyId);
+        
+        if (!downTime) return;
+        
+        const dwellTimeMs = now - downTime;
+        const flightTimeMs = this.lastKeyUpTime > 0 ? downTime - this.lastKeyUpTime : 0;
+        
+        if (keyId === 'Backspace' || keyId === 'Delete') this.errorKeyCount++;
+        if (this.isCharacterKey(keyId)) this.charKeyCount++;
+        
+        this.dwellTimes.push(dwellTimeMs);
+        if (flightTimeMs > 0 && flightTimeMs < 2000) this.flightTimes.push(flightTimeMs);
+        
+        if (this.dwellTimes.length > 1000) this.dwellTimes.shift();
+        if (this.flightTimes.length > 1000) this.flightTimes.shift();
+        
+        this.capture('keystroke', {
+          keyCode: keyId,
+          dwellTimeMs,
+          flightTimeMs,
+          shiftKey: e.shiftKey,
+          ctrlKey: e.ctrlKey,
+          altKey: e.altKey,
+          metaKey: e.metaKey,
+        });
+        
+        this.lastKeyUpTime = now;
+        this.lastKeyCode = keyId;
+        this.keyTimes.delete(keyId);
+      };
+
+      isCharacterKey(keyCode) {
+        return keyCode.startsWith('Key') || keyCode.startsWith('Digit') || keyCode.startsWith('Numpad') ||
+          ['Space', 'Period', 'Comma', 'Semicolon', 'Quote', 'Slash', 'Backslash', 'BracketLeft', 'BracketRight', 'Minus', 'Equal'].includes(keyCode);
+      }
+
+      handleScroll = () => {
+        const now = Date.now();
+        if (now - this.lastScrollTime < 100) return;
+        this.capture('scroll', { scrollX: window.scrollX, scrollY: window.scrollY });
+        this.lastScrollTime = now;
+      };
+
+      handleTouch = (e) => {
+        const touch = e.touches[0];
+        if (!touch) return;
+        this.capture('touch', { x: touch.clientX, y: touch.clientY, type: e.type, touchCount: e.touches.length });
+      };
+
+      handleVisibility = () => {
+        this.capture('visibility', { state: document.visibilityState });
+      };
+
+      handleFocus = () => { this.capture('focus', { focused: true }); };
+      handleBlur = () => { this.capture('focus', { focused: false }); };
+
+      handlePaste = (e) => {
+        const text = e.clipboardData?.getData('text') ?? '';
+        this.capture('paste', { length: text.length });
+      };
+
+      handleUnload = () => { this.flush(true); };
+
+      captureDeviceInfo() {
+        this.capture('device', {
+          userAgent: navigator.userAgent,
+          language: navigator.language,
+          languages: navigator.languages,
+          platform: navigator.platform,
+          cookieEnabled: navigator.cookieEnabled,
+          screenWidth: screen.width,
+          screenHeight: screen.height,
+          screenColorDepth: screen.colorDepth,
+          screenPixelRatio: window.devicePixelRatio,
+          timezoneOffset: new Date().getTimezoneOffset(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        });
+      }
+
+      capturePerformance() {
+        if (!window.performance) return;
+        const timing = performance.timing;
+        this.capture('performance', {
+          navigationStart: timing.navigationStart,
+          domContentLoaded: timing.domContentLoadedEventEnd - timing.navigationStart,
+          loadComplete: timing.loadEventEnd - timing.navigationStart,
+        });
+      }
+
+      emitTypingStatistics() {
+        if (this.dwellTimes.length < 5) return;
+        
+        const stats = this.calculateTypingStatistics();
+        this.capture('keystroke_dynamics', stats);
+        
+        if (this.onStats) this.onStats(stats);
+      }
+
+      calculateTypingStatistics() {
+        const avgDwell = this.calculateMean(this.dwellTimes);
+        const stdDwell = this.calculateStdDev(this.dwellTimes, avgDwell);
+        const avgFlight = this.calculateMean(this.flightTimes);
+        const stdFlight = this.calculateStdDev(this.flightTimes, avgFlight);
+        
+        const msPerChar = avgFlight + avgDwell;
+        const charsPerMinute = msPerChar > 0 ? 60000 / msPerChar : 0;
+        const estimatedWPM = Math.round(charsPerMinute / 5);
+        const errorRate = this.charKeyCount > 0 ? this.errorKeyCount / this.charKeyCount : 0;
+        
+        return {
+          totalKeystrokes: this.dwellTimes.length,
+          avgDwellTimeMs: Math.round(avgDwell * 100) / 100,
+          stdDwellTimeMs: Math.round(stdDwell * 100) / 100,
+          avgFlightTimeMs: Math.round(avgFlight * 100) / 100,
+          stdFlightTimeMs: Math.round(stdFlight * 100) / 100,
+          estimatedWPM,
+          errorRate: Math.round(errorRate * 1000) / 1000,
+          burstCount: this.burstCount,
+        };
+      }
+
+      calculateMean(values) {
+        if (values.length === 0) return 0;
+        return values.reduce((sum, v) => sum + v, 0) / values.length;
+      }
+
+      calculateStdDev(values, mean) {
+        if (values.length < 2) return 0;
+        const m = mean ?? this.calculateMean(values);
+        const squaredDiffs = values.map(v => Math.pow(v - m, 2));
+        return Math.sqrt(this.calculateMean(squaredDiffs));
+      }
+
+      startFlushTimer() {
+        this.flushTimer = setInterval(() => {
+          if (this.buffer.length > 0) this.flush();
+        }, this.config.flushInterval);
+      }
+
+      stopFlushTimer() {
+        if (this.flushTimer) {
+          clearInterval(this.flushTimer);
+          this.flushTimer = null;
+        }
+      }
+
+      startStatsFlushTimer() {
+        this.statsFlushTimer = setInterval(() => {
+          this.emitTypingStatistics();
+        }, 5000);
+      }
+
+      stopStatsFlushTimer() {
+        if (this.statsFlushTimer) {
+          clearInterval(this.statsFlushTimer);
+          this.statsFlushTimer = null;
+        }
+      }
+
+      resetKeystrokeDynamics() {
+        this.keyTimes.clear();
+        this.lastKeyUpTime = 0;
+        this.lastKeyCode = '';
+        this.dwellTimes = [];
+        this.flightTimes = [];
+        this.digraphTimings = [];
+        this.errorKeyCount = 0;
+        this.charKeyCount = 0;
+        this.burstStartTime = 0;
+        this.burstCount = 0;
+      }
+
+      async flush(useBeacon = false) {
+        if (!this.session || this.buffer.length === 0) return;
+        
+        const signals = this.buffer.flush();
+        const payload = JSON.stringify({ sessionId: this.session.id, signals });
+        const url = `${this.config.endpoint}/api/v1/sessions/${this.session.id}/signals`;
+        
+        if (this.onFlush) this.onFlush(signals.length);
+        
+        if (useBeacon && navigator.sendBeacon) {
+          navigator.sendBeacon(url, payload);
+        } else {
+          try {
+            await fetch(url, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: payload,
+              keepalive: true,
+            });
+          } catch (err) {
+            console.error('Flush failed:', err);
+            signals.forEach(s => this.buffer.push(s));
+          }
+        }
+      }
+
+      async sendComplete() {
+        if (!this.session) return;
+        
+        const url = `${this.config.endpoint}/api/v1/sessions/${this.session.id}/complete`;
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ completedAt: Date.now() }),
+          });
+          return await res.json();
+        } catch (err) {
+          console.error('Complete failed:', err);
+        }
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Playground UI Logic
+    // ─────────────────────────────────────────────────────────────
+
+    const tracker = new FraudTracker();
+    let startTime = null;
+    let signalCounts = {};
+    let totalSignals = 0;
+    let flushCount = 0;
+    let durationInterval = null;
+
+    // DOM elements
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const initBtn = document.getElementById('initBtn');
+    const completeBtn = document.getElementById('completeBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const sessionIdInput = document.getElementById('sessionId');
+    const logEl = document.getElementById('log');
+    const signalCountEl = document.getElementById('signalCount');
+    const flushCountEl = document.getElementById('flushCount');
+    const durationEl = document.getElementById('duration');
+    const signalCountsEl = document.getElementById('signalCounts');
+    
+    // Typing stats
+    const avgDwellEl = document.getElementById('avgDwell');
+    const avgFlightEl = document.getElementById('avgFlight');
+    const estWpmEl = document.getElementById('estWpm');
+    const errorRateEl = document.getElementById('errorRate');
+
+    // Mouse canvas
+    const canvas = document.getElementById('mouseCanvas');
+    const ctx = canvas.getContext('2d');
+    let mouseTrail = [];
+
+    function resizeCanvas() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    function log(message, type = 'system') {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function updateSignalCounts() {
+      signalCountsEl.innerHTML = Object.entries(signalCounts)
+        .map(([type, count]) => `<span class="signal-badge ${type}">${type}: ${count}</span>`)
+        .join('');
+    }
+
+    function updateDuration() {
+      if (!startTime) return;
+      const seconds = Math.floor((Date.now() - startTime) / 1000);
+      durationEl.textContent = `${seconds}s`;
+    }
+
+    function drawMouseTrail() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      if (mouseTrail.length < 2) return;
+      
+      ctx.beginPath();
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      
+      const canvasRect = canvas.getBoundingClientRect();
+      
+      for (let i = 0; i < mouseTrail.length; i++) {
+        const point = mouseTrail[i];
+        const x = point.x - canvasRect.left;
+        const y = point.y - canvasRect.top;
+        
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+        
+        // Fade older points
+        const alpha = (i / mouseTrail.length) * 0.8 + 0.2;
+        ctx.strokeStyle = `rgba(59, 130, 246, ${alpha})`;
+      }
+      
+      ctx.stroke();
+      
+      // Draw current point
+      if (mouseTrail.length > 0) {
+        const last = mouseTrail[mouseTrail.length - 1];
+        const x = last.x - canvasRect.left;
+        const y = last.y - canvasRect.top;
+        
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#3b82f6';
+        ctx.fill();
+      }
+    }
+
+    // Tracker callbacks
+    tracker.onSignal = (signal) => {
+      totalSignals++;
+      signalCounts[signal.type] = (signalCounts[signal.type] || 0) + 1;
+      signalCountEl.textContent = totalSignals;
+      updateSignalCounts();
+      
+      // Shorten payload for log
+      let payloadStr = JSON.stringify(signal.payload);
+      if (payloadStr.length > 60) payloadStr = payloadStr.slice(0, 60) + '...';
+      log(`${signal.type}: ${payloadStr}`, signal.type);
+      
+      // Track mouse for canvas
+      if (signal.type === 'mouse_move') {
+        mouseTrail.push({ x: signal.payload.x, y: signal.payload.y });
+        if (mouseTrail.length > 100) mouseTrail.shift();
+        drawMouseTrail();
+      }
+    };
+
+    tracker.onFlush = (count) => {
+      flushCount++;
+      flushCountEl.textContent = flushCount;
+      log(`Flushed ${count} signals to server`, 'system');
+    };
+
+    tracker.onStats = (stats) => {
+      avgDwellEl.textContent = `${stats.avgDwellTimeMs}ms`;
+      avgFlightEl.textContent = `${stats.avgFlightTimeMs}ms`;
+      estWpmEl.textContent = stats.estimatedWPM;
+      errorRateEl.textContent = `${(stats.errorRate * 100).toFixed(1)}%`;
+    };
+
+    // Button handlers
+    initBtn.addEventListener('click', async () => {
+      const session = tracker.init({
+        endpoint: 'http://localhost:4000',
+        clientId: 'playground-user',
+        batchSize: 50,
+        flushInterval: 500,
+        debug: true,
+      });
+      
+      sessionIdInput.value = session.id;
+      statusDot.classList.add('active');
+      statusText.textContent = 'Tracking active';
+      initBtn.disabled = true;
+      completeBtn.disabled = false;
+      
+      startTime = Date.now();
+      durationInterval = setInterval(updateDuration, 1000);
+      
+      log(`Session started: ${session.id}`, 'system');
+    });
+
+    completeBtn.addEventListener('click', async () => {
+      log('Completing session...', 'system');
+      const result = await tracker.sendComplete();
+      
+      statusDot.classList.remove('active');
+      statusText.textContent = 'Session completed';
+      initBtn.disabled = false;
+      completeBtn.disabled = true;
+      
+      clearInterval(durationInterval);
+      
+      if (result?.analysis) {
+        log(`Analysis: ${result.analysis.verdict} (confidence: ${result.analysis.confidenceScore})`, 'system');
+      }
+      
+      // Reset UI state
+      totalSignals = 0;
+      flushCount = 0;
+      signalCounts = {};
+      mouseTrail = [];
+      signalCountEl.textContent = '0';
+      flushCountEl.textContent = '0';
+      durationEl.textContent = '0s';
+      updateSignalCounts();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      logEl.innerHTML = '';
+      log('Log cleared', 'system');
+    });
+
+    log('Playground ready. Click "Initialize Tracker" to start.', 'system');
+  </script>
+</body>
+</html>
