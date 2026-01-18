@@ -613,18 +613,44 @@
 
       try {
         const response = await fetch(`http://localhost:4000/api/v1/sessions/${currentSessionId}/analysis`);
-        if (!response.ok) {
-          renderAnalysisWaiting('Waiting for analysis data...');
-          return;
-        }
-
         const data = await response.json();
+        
         if (data.success && data.data) {
           renderAnalysis(data.data);
+        } else if (data.error && data.error.code === 'ANALYSIS_NOT_READY') {
+          // Session is still active, show in-progress state
+          renderAnalysisInProgress();
+        } else {
+          renderAnalysisWaiting('Waiting for analysis data...');
         }
       } catch (err) {
         renderAnalysisWaiting('Unable to fetch analysis');
       }
+    }
+
+    function renderAnalysisInProgress() {
+      analysisContent.innerHTML = `
+        <div class="analysis-panel" style="text-align: center;">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">📊</div>
+          <div style="font-weight: 600; margin-bottom: 0.5rem;">Session In Progress</div>
+          <div style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1rem;">
+            Collecting behavioral signals...
+          </div>
+          <div style="display: flex; justify-content: center; gap: 1rem; margin-bottom: 1rem;">
+            <div class="stat" style="min-width: 80px;">
+              <div class="stat-value" style="font-size: 1.25rem;">${totalSignals}</div>
+              <div class="stat-label">Signals</div>
+            </div>
+            <div class="stat" style="min-width: 80px;">
+              <div class="stat-value" style="font-size: 1.25rem;">${flushCount}</div>
+              <div class="stat-label">Flushes</div>
+            </div>
+          </div>
+          <div style="color: var(--text-muted); font-size: 0.75rem;">
+            Click <strong>Complete Session</strong> to run fraud analysis
+          </div>
+        </div>
+      `;
     }
 
     function renderAnalysisWaiting(message) {
@@ -694,7 +720,8 @@
     }
 
     function startAnalysisPolling() {
-      renderAnalysisWaiting('Waiting for first flush...');
+      // Show in-progress state immediately
+      renderAnalysisInProgress();
       // Start polling after 2 seconds to give time for first signals
       setTimeout(() => {
         fetchAnalysis();
