@@ -14,6 +14,14 @@ export interface FraudTrackerConfig {
   flushInterval?: number;
   /** Enable debug logging */
   debug?: boolean;
+  /** Callback when a signal is captured */
+  onSignal?: (signal: Signal) => void;
+  /** Callback when signals are flushed to API */
+  onFlush?: (signals: Signal[]) => void;
+  /** Callback when typing statistics are updated */
+  onTypingStats?: (stats: TypingStatistics) => void;
+  /** Callback when session is initialized */
+  onSessionStart?: (session: Session) => void;
 }
 
 export interface Signal {
@@ -124,7 +132,7 @@ class SignalBuffer {
 }
 
 class FraudTracker {
-  private config: Required<FraudTrackerConfig>;
+  private config: FraudTrackerConfig & Required<Pick<FraudTrackerConfig, 'endpoint' | 'clientId' | 'batchSize' | 'flushInterval' | 'debug'>>;
   private session: Session | null = null;
   private buffer: SignalBuffer;
   private flushTimer: ReturnType<typeof setInterval> | null = null;
@@ -168,6 +176,9 @@ class FraudTracker {
     this.captureDeviceInfo();
     this.capturePerformance();
 
+    // Fire onSessionStart callback if provided
+    this.config.onSessionStart?.(this.session);
+
     this.log('Initialized', { sessionId: this.session.id });
   }
 
@@ -185,6 +196,9 @@ class FraudTracker {
       timestamp: Date.now(),
       payload,
     };
+
+    // Fire onSignal callback if provided
+    this.config.onSignal?.(signal);
 
     const shouldFlush = this.buffer.push(signal);
     if (shouldFlush) {
@@ -512,6 +526,9 @@ class FraudTracker {
     
     const stats = this.calculateTypingStatistics();
     
+    // Fire onTypingStats callback if provided
+    this.config.onTypingStats?.(stats);
+    
     this.capture('keystroke_dynamics', {
       ...stats,
       // Include recent digraph patterns (anonymized)
@@ -717,6 +734,10 @@ class FraudTracker {
     if (!this.session || this.buffer.length === 0) return;
 
     const signals = this.buffer.flush();
+
+    // Fire onFlush callback if provided
+    this.config.onFlush?.(signals);
+
     const payload = JSON.stringify({
       sessionId: this.session.id,
       signals,
