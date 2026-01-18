@@ -153,8 +153,9 @@ class FraudTracker {
 
   /**
    * Initialize the tracker with configuration
+   * Registers session with the API server
    */
-  init(config: FraudTrackerConfig): void {
+  async init(config: FraudTrackerConfig): Promise<void> {
     if (this.isInitialized) {
       this.log('Already initialized');
       return;
@@ -169,7 +170,14 @@ class FraudTracker {
     };
 
     this.buffer = new SignalBuffer(this.config.batchSize);
-    this.session = this.createSession();
+    
+    // Create local session first
+    const localSession = this.createSession();
+    
+    // Register session with API
+    const registeredSession = await this.registerSession(localSession);
+    this.session = registeredSession ?? localSession;
+    
     this.isInitialized = true;
 
     this.attachListeners();
@@ -183,6 +191,51 @@ class FraudTracker {
     this.config.onSessionStart?.(this.session);
 
     this.log('Initialized', { sessionId: this.session.id });
+  }
+
+  /**
+   * Register session with the API server
+   */
+  private async registerSession(localSession: Session): Promise<Session | null> {
+    const url = `${this.config.endpoint}/api/v1/sessions`;
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: localSession.clientId,
+          deviceFingerprint: localSession.deviceFingerprint,
+          metadata: {
+            startedAt: localSession.startedAt,
+            userAgent: navigator.userAgent,
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        this.log('Session registration failed', { status: response.status });
+        return null;
+      }
+
+      const data = await response.json();
+      
+      // Handle both wrapped and unwrapped response formats
+      const sessionId = data.data?.sessionId ?? data.sessionId;
+      
+      if (sessionId) {
+        this.log('Session registered with API', { sessionId });
+        return {
+          ...localSession,
+          id: sessionId,
+        };
+      }
+      
+      return null;
+    } catch (err) {
+      this.log('Session registration error', { error: err });
+      return null;
+    }
   }
 
   /**
