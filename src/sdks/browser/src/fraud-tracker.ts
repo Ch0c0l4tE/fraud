@@ -41,7 +41,9 @@ export type SignalType =
   | 'focus'
   | 'paste'
   | 'device'
-  | 'performance';
+  | 'performance'
+  | 'fingerprint'
+  | 'form_interaction';
 
 export interface Session {
   id: string;
@@ -175,6 +177,7 @@ class FraudTracker {
     this.startStatsFlushTimer();
     this.captureDeviceInfo();
     this.capturePerformance();
+    this.captureFingerprint();
 
     // Fire onSessionStart callback if provided
     this.config.onSessionStart?.(this.session);
@@ -330,24 +333,32 @@ class FraudTracker {
   // Event Handlers
   // ─────────────────────────────────────────────────────────────
 
-  private lastMousePosition = { x: 0, y: 0, time: 0 };
+  private lastMousePosition = { x: 0, y: 0, time: 0, velocity: 0 };
 
   private handleMouseMove = (e: MouseEvent): void => {
     const now = Date.now();
     const dx = e.clientX - this.lastMousePosition.x;
     const dy = e.clientY - this.lastMousePosition.y;
     const dt = now - this.lastMousePosition.time || 1;
-    const velocity = Math.sqrt(dx * dx + dy * dy) / dt;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const velocity = distance / dt;
+    
+    // Calculate acceleration (change in velocity over time)
+    const dv = velocity - this.lastMousePosition.velocity;
+    const acceleration = dt > 0 ? dv / dt : 0;
 
     this.capture('mouse_move', {
       x: e.clientX,
       y: e.clientY,
       velocity,
+      acceleration,
       dx,
       dy,
+      distance,
+      dt,
     });
 
-    this.lastMousePosition = { x: e.clientX, y: e.clientY, time: now };
+    this.lastMousePosition = { x: e.clientX, y: e.clientY, time: now, velocity };
   };
 
   private handleClick = (e: MouseEvent): void => {
@@ -679,6 +690,179 @@ class FraudTracker {
   };
 
   // ─────────────────────────────────────────────────────────────
+  // Form Interaction Tracking
+  // ─────────────────────────────────────────────────────────────
+
+  /** Track form field interactions */
+  private formFieldData: Map<string, {
+    fieldId: string;
+    fieldType: string;
+    focusTime: number;
+    blurTime: number;
+    keystrokeCount: number;
+    pasteCount: number;
+    focusOrder: number;
+    corrections: number;
+  }> = new Map();
+
+  /** Current field focus order counter */
+  private formFocusOrder = 0;
+
+  /** Currently focused field */
+  private currentFormField: string | null = null;
+
+  /**
+   * Start tracking a form for interaction patterns
+   * Call this to enable form-level analytics
+   */
+  trackForm(formOrSelector: HTMLFormElement | string): void {
+    const form = typeof formOrSelector === 'string'
+      ? document.querySelector<HTMLFormElement>(formOrSelector)
+      : formOrSelector;
+
+    if (!form) {
+      this.log('Form not found', { selector: formOrSelector });
+      return;
+    }
+
+    // Track all input fields
+    const fields = form.querySelectorAll('input, textarea, select');
+    fields.forEach((field) => {
+      this.attachFormFieldListeners(field as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement);
+    });
+
+    // Track form submission
+    form.addEventListener('submit', this.handleFormSubmit);
+
+    this.log('Form tracking started', { fieldCount: fields.length });
+  }
+
+  private attachFormFieldListeners(field: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): void {
+    const fieldId = field.id || field.name || `field_${Math.random().toString(36).slice(2, 8)}`;
+
+    field.addEventListener('focus', () => this.handleFormFieldFocus(fieldId, field));
+    field.addEventListener('blur', () => this.handleFormFieldBlur(fieldId, field));
+    field.addEventListener('input', () => this.handleFormFieldInput(fieldId, field));
+    field.addEventListener('paste', () => this.handleFormFieldPaste(fieldId));
+  }
+
+  private handleFormFieldFocus = (fieldId: string, field: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): void => {
+    const now = Date.now();
+    this.formFocusOrder++;
+    this.currentFormField = fieldId;
+
+    if (!this.formFieldData.has(fieldId)) {
+      this.formFieldData.set(fieldId, {
+        fieldId,
+        fieldType: field.type || field.tagName.toLowerCase(),
+        focusTime: now,
+        blurTime: 0,
+        keystrokeCount: 0,
+        pasteCount: 0,
+        focusOrder: this.formFocusOrder,
+        corrections: 0,
+      });
+    } else {
+      const data = this.formFieldData.get(fieldId)!;
+      data.focusTime = now;
+      // Track re-focus as potential correction behavior
+      if (data.blurTime > 0) {
+        data.corrections++;
+      }
+    }
+  };
+
+  private handleFormFieldBlur = (fieldId: string, field: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): void => {
+    const now = Date.now();
+    const data = this.formFieldData.get(fieldId);
+    
+    if (data) {
+      data.blurTime = now;
+      const timeToFill = now - data.focusTime;
+
+      this.capture('form_interaction', {
+        event: 'field_complete',
+        fieldId,
+        fieldType: data.fieldType,
+        timeToFillMs: timeToFill,
+        keystrokeCount: data.keystrokeCount,
+        pasteCount: data.pasteCount,
+        focusOrder: data.focusOrder,
+        corrections: data.corrections,
+        valueLength: (field as HTMLInputElement).value?.length ?? 0,
+        // Typing speed for this field
+        typingSpeed: data.keystrokeCount > 0 ? (data.keystrokeCount / (timeToFill / 1000)) : 0,
+      });
+    }
+
+    this.currentFormField = null;
+  };
+
+  private handleFormFieldInput = (fieldId: string, field: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement): void => {
+    const data = this.formFieldData.get(fieldId);
+    if (data) {
+      data.keystrokeCount++;
+    }
+  };
+
+  private handleFormFieldPaste = (fieldId: string): void => {
+    const data = this.formFieldData.get(fieldId);
+    if (data) {
+      data.pasteCount++;
+    }
+  };
+
+  private handleFormSubmit = (e: Event): void => {
+    const form = e.target as HTMLFormElement;
+    const formFields = Array.from(this.formFieldData.values());
+
+    // Calculate form-level statistics
+    const totalFields = formFields.length;
+    const filledFields = formFields.filter(f => f.keystrokeCount > 0 || f.pasteCount > 0).length;
+    const totalTimeMs = formFields.reduce((sum, f) => sum + (f.blurTime - f.focusTime), 0);
+    const totalKeystrokes = formFields.reduce((sum, f) => sum + f.keystrokeCount, 0);
+    const totalPastes = formFields.reduce((sum, f) => sum + f.pasteCount, 0);
+    const totalCorrections = formFields.reduce((sum, f) => sum + f.corrections, 0);
+
+    // Check focus order - was it sequential or jumpy?
+    const focusOrders = formFields.map(f => f.focusOrder).sort((a, b) => a - b);
+    let sequentialFocusCount = 0;
+    for (let i = 1; i < focusOrders.length; i++) {
+      if (focusOrders[i] === focusOrders[i - 1] + 1) {
+        sequentialFocusCount++;
+      }
+    }
+    const focusSequentialRatio = focusOrders.length > 1 
+      ? sequentialFocusCount / (focusOrders.length - 1) 
+      : 1;
+
+    this.capture('form_interaction', {
+      event: 'form_submit',
+      formId: form.id || form.name || 'unknown',
+      totalFields,
+      filledFields,
+      totalTimeMs,
+      totalKeystrokes,
+      totalPastes,
+      totalCorrections,
+      focusSequentialRatio,
+      avgTimePerFieldMs: totalFields > 0 ? totalTimeMs / totalFields : 0,
+      pasteRatio: totalFields > 0 ? totalPastes / totalFields : 0,
+      // Field-by-field summary
+      fieldSummary: formFields.map(f => ({
+        fieldType: f.fieldType,
+        timeToFillMs: f.blurTime - f.focusTime,
+        keystrokeCount: f.keystrokeCount,
+        wasPasted: f.pasteCount > 0,
+      })),
+    });
+
+    // Reset form tracking data
+    this.formFieldData.clear();
+    this.formFocusOrder = 0;
+  };
+
+  // ─────────────────────────────────────────────────────────────
   // Device & Performance
   // ─────────────────────────────────────────────────────────────
 
@@ -709,6 +893,311 @@ class FraudTracker {
       loadComplete: timing.loadEventEnd - timing.navigationStart,
       redirectCount: performance.navigation?.redirectCount ?? 0,
     });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Device Fingerprinting
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Capture comprehensive device fingerprint
+   * Called once during initialization
+   */
+  private captureFingerprint(): void {
+    const fingerprint = {
+      canvas: this.getCanvasFingerprint(),
+      webgl: this.getWebGLFingerprint(),
+      audio: this.getAudioFingerprint(),
+      fonts: this.getInstalledFonts(),
+      hardware: this.getHardwareInfo(),
+      timezone: this.getTimezoneInfo(),
+    };
+
+    this.capture('fingerprint', {
+      ...fingerprint,
+      hash: this.hashFingerprint(fingerprint),
+    });
+  }
+
+  /**
+   * Canvas fingerprinting - draws various elements and hashes the result
+   * Different browsers/GPUs produce unique outputs
+   */
+  private getCanvasFingerprint(): string {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 280;
+      canvas.height = 60;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return 'unsupported';
+
+      // Background
+      ctx.fillStyle = '#f0f0f0';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Text with specific font rendering
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#069';
+      ctx.font = '14px Arial, sans-serif';
+      ctx.fillText('Fraud Detection Canvas 🔍', 4, 17);
+
+      // Styled text
+      ctx.fillStyle = 'rgba(102, 204, 0, 0.7)';
+      ctx.font = '18px Georgia, serif';
+      ctx.fillText('Canvas Fingerprint', 4, 40);
+
+      // Geometric shapes
+      ctx.beginPath();
+      ctx.arc(230, 30, 20, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 0, 128, 0.5)';
+      ctx.fill();
+
+      // Gradient
+      const gradient = ctx.createLinearGradient(0, 50, 280, 50);
+      gradient.addColorStop(0, '#ff0000');
+      gradient.addColorStop(0.5, '#00ff00');
+      gradient.addColorStop(1, '#0000ff');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 52, 280, 8);
+
+      // Get data URL and hash it
+      const dataURL = canvas.toDataURL('image/png');
+      return this.simpleHash(dataURL);
+    } catch (e) {
+      return 'error';
+    }
+  }
+
+  /**
+   * WebGL fingerprinting - extracts GPU/driver information
+   * Critical for detecting VMs and headless browsers
+   */
+  private getWebGLFingerprint(): Record<string, unknown> {
+    try {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (!gl || !(gl instanceof WebGLRenderingContext)) {
+        return { supported: false };
+      }
+
+      const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+      const result: Record<string, unknown> = {
+        supported: true,
+        vendor: gl.getParameter(gl.VENDOR),
+        renderer: gl.getParameter(gl.RENDERER),
+        version: gl.getParameter(gl.VERSION),
+        shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+      };
+
+      if (debugInfo) {
+        result.unmaskedVendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+        result.unmaskedRenderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+      }
+
+      // Get supported extensions
+      result.extensions = gl.getSupportedExtensions()?.slice(0, 20) ?? [];
+      result.extensionCount = gl.getSupportedExtensions()?.length ?? 0;
+
+      // Max texture size (differs by GPU)
+      result.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      result.maxViewportDims = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+      result.maxRenderbufferSize = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE);
+
+      // Antialiasing
+      result.antialias = gl.getContextAttributes()?.antialias;
+
+      return result;
+    } catch (e) {
+      return { supported: false, error: true };
+    }
+  }
+
+  /**
+   * Audio fingerprinting - uses AudioContext to generate unique signature
+   * Based on oscillator and compressor processing differences
+   */
+  private getAudioFingerprint(): string {
+    try {
+      // @ts-expect-error - webkitAudioContext for Safari
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return 'unsupported';
+
+      const context = new AudioContext();
+      const oscillator = context.createOscillator();
+      const analyser = context.createAnalyser();
+      const gain = context.createGain();
+      const compressor = context.createDynamicsCompressor();
+
+      // Configure oscillator
+      oscillator.type = 'triangle';
+      oscillator.frequency.setValueAtTime(10000, context.currentTime);
+
+      // Configure compressor
+      compressor.threshold.setValueAtTime(-50, context.currentTime);
+      compressor.knee.setValueAtTime(40, context.currentTime);
+      compressor.ratio.setValueAtTime(12, context.currentTime);
+      compressor.attack.setValueAtTime(0, context.currentTime);
+      compressor.release.setValueAtTime(0.25, context.currentTime);
+
+      // Connect nodes
+      oscillator.connect(compressor);
+      compressor.connect(analyser);
+      analyser.connect(gain);
+      gain.connect(context.destination);
+      gain.gain.setValueAtTime(0, context.currentTime); // Mute output
+
+      oscillator.start(0);
+
+      // Get frequency data
+      const freqData = new Float32Array(analyser.frequencyBinCount);
+      analyser.getFloatFrequencyData(freqData);
+
+      // Create fingerprint from frequency data
+      let fingerprint = 0;
+      for (let i = 0; i < freqData.length; i++) {
+        fingerprint += Math.abs(freqData[i]);
+      }
+
+      oscillator.stop();
+      context.close();
+
+      return fingerprint.toString();
+    } catch (e) {
+      return 'error';
+    }
+  }
+
+  /**
+   * Font detection - checks for installed fonts
+   * Different OS/users have different font sets
+   */
+  private getInstalledFonts(): string[] {
+    const baseFonts = ['monospace', 'sans-serif', 'serif'];
+    const testFonts = [
+      'Arial', 'Arial Black', 'Arial Narrow', 'Calibri', 'Cambria',
+      'Comic Sans MS', 'Consolas', 'Courier New', 'Georgia', 'Helvetica',
+      'Impact', 'Lucida Console', 'Lucida Sans', 'Microsoft Sans Serif',
+      'Palatino Linotype', 'Segoe UI', 'Tahoma', 'Times New Roman',
+      'Trebuchet MS', 'Verdana', 'Monaco', 'Menlo', 'Ubuntu', 'Roboto',
+      'Open Sans', 'Source Sans Pro', 'Fira Code', 'SF Pro',
+    ];
+
+    const detectedFonts: string[] = [];
+
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return [];
+
+      const testString = 'mmmmmmmmmmlli';
+      const testSize = '72px';
+
+      // Get baseline widths
+      const baseWidths: Record<string, number> = {};
+      for (const baseFont of baseFonts) {
+        ctx.font = `${testSize} ${baseFont}`;
+        baseWidths[baseFont] = ctx.measureText(testString).width;
+      }
+
+      // Test each font
+      for (const font of testFonts) {
+        let detected = false;
+        for (const baseFont of baseFonts) {
+          ctx.font = `${testSize} '${font}', ${baseFont}`;
+          const width = ctx.measureText(testString).width;
+          if (width !== baseWidths[baseFont]) {
+            detected = true;
+            break;
+          }
+        }
+        if (detected) {
+          detectedFonts.push(font);
+        }
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+
+    return detectedFonts;
+  }
+
+  /**
+   * Hardware info - additional device characteristics
+   */
+  private getHardwareInfo(): Record<string, unknown> {
+    const nav = navigator as Navigator & {
+      deviceMemory?: number;
+      hardwareConcurrency?: number;
+      connection?: {
+        effectiveType?: string;
+        downlink?: number;
+        rtt?: number;
+        saveData?: boolean;
+      };
+      getBattery?: () => Promise<{
+        charging: boolean;
+        chargingTime: number;
+        dischargingTime: number;
+        level: number;
+      }>;
+    };
+
+    return {
+      deviceMemory: nav.deviceMemory ?? 'unknown',
+      hardwareConcurrency: nav.hardwareConcurrency ?? 'unknown',
+      maxTouchPoints: navigator.maxTouchPoints ?? 0,
+      connection: nav.connection ? {
+        effectiveType: nav.connection.effectiveType,
+        downlink: nav.connection.downlink,
+        rtt: nav.connection.rtt,
+        saveData: nav.connection.saveData,
+      } : 'unsupported',
+    };
+  }
+
+  /**
+   * Timezone information - detect mismatches for proxy/VPN detection
+   */
+  private getTimezoneInfo(): Record<string, unknown> {
+    const date = new Date();
+    const jan = new Date(date.getFullYear(), 0, 1);
+    const jul = new Date(date.getFullYear(), 6, 1);
+
+    return {
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezoneOffset: date.getTimezoneOffset(),
+      // DST detection
+      stdOffset: Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset()),
+      dstOffset: Math.min(jan.getTimezoneOffset(), jul.getTimezoneOffset()),
+      hasDST: jan.getTimezoneOffset() !== jul.getTimezoneOffset(),
+      // Locale info
+      locale: Intl.DateTimeFormat().resolvedOptions().locale,
+      dateFormat: new Intl.DateTimeFormat().format(date),
+      // Time format preference
+      hour12: new Intl.DateTimeFormat(undefined, { hour: 'numeric' })
+        .resolvedOptions().hour12,
+    };
+  }
+
+  /**
+   * Simple hash function for fingerprint strings
+   */
+  private simpleHash(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash).toString(16);
+  }
+
+  /**
+   * Create overall fingerprint hash from all components
+   */
+  private hashFingerprint(fp: Record<string, unknown>): string {
+    const str = JSON.stringify(fp);
+    return this.simpleHash(str);
   }
 
   // ─────────────────────────────────────────────────────────────
