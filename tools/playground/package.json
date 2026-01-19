@@ -4,8 +4,9 @@
   "description": "Test playground for fraud detection SDK",
   "private": true,
   "scripts": {
+    "start": "npx serve -p 3000",
     "dev": "concurrently \"npm run api\" \"npm run serve\"",
-    "serve": "cd /home/jpc/dev/fraud && npx serve -p 3000",
+    "serve": "npx serve -p 3000",
     "api": "node mock-server.js",
     "build:sdk": "cd ../../src/sdks/browser && npm run build"
   },

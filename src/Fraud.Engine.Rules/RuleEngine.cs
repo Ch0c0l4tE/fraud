@@ -169,7 +169,7 @@ public class MouseVelocityRule : IFraudRule
             return Task.FromResult<RiskFactor?>(null);
 
         var velocities = mouseSignals
-            .Select(s => s.Payload.TryGetValue("velocity", out var v) ? Convert.ToDouble(v) : 0.0)
+            .Select(s => PayloadHelper.GetDouble(s.Payload, "velocity"))
             .Where(v => v > 0)
             .ToList();
 
@@ -241,8 +241,8 @@ public class MousePatternRule : IFraudRule
         // Extract positions
         var positions = mouseSignals
             .Select(s => (
-                X: s.Payload.TryGetValue("x", out var x) ? Convert.ToDouble(x) : 0,
-                Y: s.Payload.TryGetValue("y", out var y) ? Convert.ToDouble(y) : 0
+                X: PayloadHelper.GetDouble(s.Payload, "x"),
+                Y: PayloadHelper.GetDouble(s.Payload, "y")
             ))
             .ToList();
 
@@ -313,12 +313,12 @@ public class KeystrokeDynamicsRule : IFraudRule
             return Task.FromResult<RiskFactor?>(null);
 
         var dwellTimes = keystrokeSignals
-            .Select(s => s.Payload.TryGetValue("dwellTimeMs", out var v) ? Convert.ToDouble(v) : 0.0)
+            .Select(s => PayloadHelper.GetDouble(s.Payload, "dwellTimeMs"))
             .Where(d => d > 0)
             .ToList();
 
         var flightTimes = keystrokeSignals
-            .Select(s => s.Payload.TryGetValue("flightTimeMs", out var v) ? Convert.ToDouble(v) : 0.0)
+            .Select(s => PayloadHelper.GetDouble(s.Payload, "flightTimeMs"))
             .Where(f => f > 0)
             .ToList();
 
@@ -405,10 +405,9 @@ public class TypingSpeedRule : IFraudRule
         if (statsSignal == null)
             return Task.FromResult<RiskFactor?>(null);
 
-        if (!statsSignal.Payload.TryGetValue("estimatedWpm", out var wpmVal))
+        var wpm = PayloadHelper.GetDouble(statsSignal.Payload, "estimatedWpm");
+        if (wpm <= 0)
             return Task.FromResult<RiskFactor?>(null);
-
-        var wpm = Convert.ToDouble(wpmVal);
         
         var score = 0.0;
         string? reason = null;
@@ -654,12 +653,12 @@ public class FormInteractionRule : IFraudRule
 
         // Extract form timing data
         var timeToFillValues = formSignals
-            .Select(s => s.Payload.TryGetValue("timeToFill", out var v) ? Convert.ToDouble(v) : 0)
+            .Select(s => PayloadHelper.GetDouble(s.Payload, "timeToFill"))
             .Where(t => t > 0)
             .ToList();
 
         var correctionCounts = formSignals
-            .Select(s => s.Payload.TryGetValue("corrections", out var v) ? Convert.ToInt32(v) : 0)
+            .Select(s => PayloadHelper.GetInt(s.Payload, "corrections"))
             .ToList();
 
         var pasteDetected = formSignals.Any(s => 
@@ -813,12 +812,11 @@ public class FingerprintAnomalyRule : IFraudRule
         var reasons = new List<string>();
 
         // Check for timezone mismatch
-        if (fingerprintSignal.Payload.TryGetValue("timezoneOffset", out var fpOffset) &&
-            deviceSignal.Payload.TryGetValue("timezoneOffset", out var devOffset))
+        var fpOffsetVal = PayloadHelper.GetInt(fingerprintSignal.Payload, "timezoneOffset");
+        var devOffsetVal = PayloadHelper.GetInt(deviceSignal.Payload, "timezoneOffset");
+        if (fingerprintSignal.Payload.ContainsKey("timezoneOffset") &&
+            deviceSignal.Payload.ContainsKey("timezoneOffset"))
         {
-            var fpOffsetVal = Convert.ToInt32(fpOffset);
-            var devOffsetVal = Convert.ToInt32(devOffset);
-            
             if (Math.Abs(fpOffsetVal - devOffsetVal) > 60)
             {
                 score = Math.Max(score, 0.6);
@@ -827,11 +825,11 @@ public class FingerprintAnomalyRule : IFraudRule
         }
 
         // Check for screen resolution anomalies
-        if (deviceSignal.Payload.TryGetValue("screenWidth", out var width) &&
-            deviceSignal.Payload.TryGetValue("screenHeight", out var height))
+        var w = PayloadHelper.GetInt(deviceSignal.Payload, "screenWidth");
+        var h = PayloadHelper.GetInt(deviceSignal.Payload, "screenHeight");
+        if (deviceSignal.Payload.ContainsKey("screenWidth") &&
+            deviceSignal.Payload.ContainsKey("screenHeight"))
         {
-            var w = Convert.ToInt32(width);
-            var h = Convert.ToInt32(height);
             
             // Very unusual resolutions
             if (w == 0 || h == 0)
